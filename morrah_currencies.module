@@ -1,0 +1,235 @@
+<?php
+/**
+ * @file
+ * A block module that shows currencies rates from http://cbr.ru.
+ * For regular rates updates requires cron ro be runned at least 1 time a day.
+ * To load rates run cron just after installation.
+ */
+ /**
+ * Implements hook_help().
+ *
+ * Displays help and module information.
+ *
+ * @param path
+ *   Which path of the site we're using to display help
+ * @param arg
+ *   Array that holds the current path as returned from arg() function
+ */
+function morrah_currencies_help($path, $arg) {
+  switch ($path) {
+    case "admin/help#morrah_currencies":
+      return '<p>' . t("Shows currencies rates from http://cbr.ru.") . '</p>';
+      break;
+  }
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function morrah_currencies_block_info() {
+  $blocks['morrah_currencies'] = array(
+    // The name that will appear in the block list.
+    'info' => t('currencies rates from http://cbr.ru.'),
+    // Default setting.
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  return $blocks;
+}
+/**
+ * Implements hook_preprocess_html().
+ */
+function morrah_currencies_preprocess_html(&$variables) {
+  drupal_add_css(drupal_get_path('module', 'morrah_currencies').'/morrah_currencies.css');
+}
+/**
+ * Implements hook_block_view().
+ *
+ * Prepares the contents of the block.
+ */
+function morrah_currencies_block_view($delta = '') {
+	switch ($delta) {
+		case 'morrah_currencies':
+			$block['subject'] = t('morrah_currencies');
+		
+			if (user_access('access content')) {
+				$block['content'] = '<div class="block-morrah_currencies">';
+				$rates['USD']['Value']=variable_get('morrah_currencies_usd', '');
+				$rates['USD']['Nominal']=variable_get('morrah_currencies_usd_nom', '');
+				$rates['USD']['Date']=variable_get('morrah_currencies_date', '');
+				$rates['EUR']['Value']=variable_get('morrah_currencies_eur', '');
+				$rates['EUR']['Nominal']=variable_get('morrah_currencies_eur_nom', '');
+				$rates['EUR']['Date']=variable_get('morrah_currencies_date', '');
+				if($rates['USD']==''){
+					$rates=morrah_currencies_cbr_rates(array('USD','EUR'));
+				}
+				if($rates){
+					foreach($rates as $k=>$v){
+						$block['content'] = $block['content'].'<span>'.$k.'</span> '.$v['Value'].((intval($v['Nominal'])>1)?('/'.$v['Nominal']):'').' ';
+					}
+				}
+				$block['content'] = $block['content'].'</div>';
+				return $block;
+			}
+	}
+}
+/**
+ * Implements hook_menu().
+ */
+function morrah_currencies_menu() {
+  $items = array();
+  $items['admin/config/content/morrah_currencies'] = array(
+    'title' => 'RTA static HTML',
+    'description' => 'Configuration for Morrah Currencies module',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('morrah_currencies_form'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  return $items;
+}
+/**
+ * Page callback: RTA static settings
+ *
+ * @see current_posts_menu()
+ */
+function morrah_currencies_form($form, &$form_state) {
+/*
+	$form['morrah_currencies_currencies']['items'] = array(
+		'#type' => 'checkboxes',
+		'#options' => drupal_map_assoc(array('USD', 'EUR')),
+		'#title' => t('Choose currencies You need'),
+	);
+*/
+	$form['morrah_currencies_usd'] = array(
+		'#type' => 'textfield',
+		'#title' => t('USD rate'),
+		'#default_value' => variable_get('morrah_currencies_usd', ''),
+		'#size' => 60, 
+		'#maxlength' => 128, 
+		'#required' => TRUE,
+		'#description' => t('USD rate.'),
+	);
+	$form['morrah_currencies_usd_nom'] = array(
+		'#type' => 'textfield',
+		'#title' => t('USD rate'),
+		'#default_value' => variable_get('morrah_currencies_usd_nom', ''),
+		'#size' => 60, 
+		'#maxlength' => 128, 
+		'#required' => TRUE,
+		'#description' => t('USD nominal.'),
+	);
+	$form['morrah_currencies_eur'] = array(
+		'#type' => 'textfield',
+		'#title' => t('EUR rate'),
+		'#default_value' => variable_get('morrah_currencies_eur', ''),
+		'#size' => 60, 
+		'#maxlength' => 128, 
+		'#required' => TRUE,
+		'#description' => t('EUR rate.'),
+	);
+	$form['morrah_currencies_eur_nom'] = array(
+		'#type' => 'textfield',
+		'#title' => t('USD rate'),
+		'#default_value' => variable_get('morrah_currencies_eur_nom', ''),
+		'#size' => 60, 
+		'#maxlength' => 128, 
+		'#required' => TRUE,
+		'#description' => t('EUR nominal.'),
+	);
+	$form['morrah_currencies_date'] = array(
+		'#type' => 'textfield',
+		'#title' => t('USD rate'),
+		'#default_value' => variable_get('morrah_currencies_date', 'none'),
+		'#size' => 60, 
+		'#maxlength' => 128, 
+		'#required' => TRUE,
+		'#description' => t('Rates date.'),
+	);
+	return system_settings_form($form);
+}
+/**
+ * Implements validation from the Form API.
+ *
+ * @param $form
+ *   A structured array containing the elements and properties of the form.
+ * @param $form_state
+ *   An array that stores information about the form's current state
+ *   during processing.
+ */
+function morrah_currencies_form_validate($form, &$form_state){
+	$cont['usd'] = $form_state['values']['morrah_currencies_usd'];
+	$cont['eur'] = $form_state['values']['morrah_currencies_eur'];
+  /*if (!is_numeric($cont)){
+    form_set_error('morrah_currencies_content', t('You must enter a number for the maximum number of posts to display.'));
+  }
+  else if ($cont <= 0){
+    form_set_error('morrah_currencies_content', t('Maximum number of posts to display must be positive.'));
+  }*/
+}
+function morrah_currencies_form_submit($form, &$form_state) {
+	watchdog('morrah_currencies', sprintf('morrah_currencies_form_submit: %s', $form_state['values']['morrah_currencies_usd']));
+	drupal_set_message('Thanks','status',true);
+}
+/*function morrah_currencies_css_alter(&$css){
+	drupal_add_css(drupal_get_path('module', 'morrah_currencies').'/morrah_currencies.css');
+}*/
+function morrah_currencies_cron(){
+	morrah_currencies_cbr_rates(array('USD','EUR'));
+}
+function morrah_currencies_cbr_rates($currencies){
+	watchdog('morrah_currencies', sprintf('morrah_currencies_cbr_rates: %s %s', $currencies[0], $currencies[1]));
+	drupal_set_message('function morrah_currencies() is called','status',true);
+	/*$currencies = array('USD','EUR');*/	
+	// Базовый URL скрипта на cbr.ru
+	$scripturl = 'http://www.cbr.ru/scripts/XML_daily.asp';
+	// Код валюты в архиве данных cbr.ru
+	$currency_codes['USD']='R01235';//Доллар США
+	$currency_codes['EUR']='R01239';//Евро
+	// URL для запроса данных
+	$requrl = "{$scripturl}";
+	$doc = file($requrl);
+	$doc = implode($doc, '');
+	// инициализируем вспомогательные массивы
+	$r = array();/*для валют*/
+	$dt = array();/*для даты*/
+	$m = array();/*для всего*/
+	$d = array();/*результат*/
+	// ищем <ValCurs>...</ValCurs>
+	if(preg_match("/<ValCurs(.*?)>(.*?)<\/ValCurs>/is", $doc, $m)){
+		if(preg_match("/Date=\"(.*?)\"/is", $m[1],$dt)) {
+			$dv = "{$dt[1]}"; // Приводим дату в норм. вид
+		}
+		else{
+			$dv="none";
+		}
+		variable_set('morrah_currencies_date',$dv);
+		// а потом ищем все вхождения <Valute>...</Valute>
+		preg_match_all("/<Valute(.*?)>(.*?)<\/Valute>/is", $m[2], $r, PREG_SET_ORDER);
+		$m = array();	// его уже использовали, реинициализируем
+		// Сканируем на предмет самых нужных цифр
+		for($i=0; $i<count($r); $i++) {
+			$m = array();	// его уже использовали, реинициализируем
+			if(preg_match("/<CharCode>(.*?)<\/CharCode>.*?<Nominal>(.*?)<\/Nominal>.*?<Value>(.*?)<\/Value>/is", $r[$i][2], $m)) {
+				if(in_array($m[1],$currencies)){
+					$m[2] = preg_replace("/,/",".",$m[2]);
+					$ind=$m[1];
+					$d[$ind] = array('CharCode'=>$m[1], 'Nominal'=>$m[2], 'Value'=>$m[3], 'Date'=>$dv);
+					$m = array();	// его уже использовали, реинициализируем
+					if(preg_match("/ID=\"(R\d{5})\"/is", $r[$i][1],$m)) {
+						$id = (!empty($m[1])?$m[1]:''); // код валюты
+						$d[$ind]['ID']=$id;
+					}
+					$str='';
+					foreach($d[$ind] as $k=>$v){
+						$str=$str.$k.': '.$v.'; ';
+					}
+					watchdog('morrah_currencies', sprintf('morrah_currencies_cbr_rates: %s %s', $ind, $str));
+					variable_set('morrah_currencies_'.strtolower($ind),$d[$ind]['Value']);
+					variable_set('morrah_currencies_'.strtolower($ind.'_nom'),$d[$ind]['Nominal']);
+				}
+			}
+		}
+		return $d;
+	}
+	return false;
+}
