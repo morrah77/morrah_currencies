@@ -1,0 +1,5 @@
+name = morrah_currencies
+description = A block module that shows currencies rates from http://cbr.ru. For regular rates updates requires cron ro be runned at least 1 time a day. To load rates run cron just after installation.
+core = 7.x
+; NEW LINE
+configure = admin/config/content/morrah_currencies
